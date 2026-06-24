@@ -2,12 +2,11 @@
 -- Project: Invoice-to-Payment Process Analysis with SQL
 -- File: 07_create_views.sql
 -- Purpose: Create reusable analytical views for invoice,
---          payment, vendor, and process analysis.
+-- payment, vendor, and process analysis.
 -- SQL Dialect: MySQL
 -- ============================================================
 
 USE invoice_to_payment_analysis;
-
 
 -- ============================================================
 -- 1. Drop existing views
@@ -21,7 +20,6 @@ DROP VIEW IF EXISTS vw_process_variants;
 DROP VIEW IF EXISTS vw_vendor_performance;
 DROP VIEW IF EXISTS vw_process_cycle_times;
 DROP VIEW IF EXISTS vw_open_process_cases;
-
 
 -- ============================================================
 -- 2. Invoice overview
@@ -54,6 +52,8 @@ SELECT
     po.po_amount,
     po.po_status,
 
+    pit.total_invoiced_amount_for_po,
+
     et.exception_type_id,
     et.exception_name,
     et.exception_category,
@@ -65,7 +65,10 @@ SELECT
     p.payment_amount,
     p.payment_status,
 
-    DATEDIFF(i.received_date, i.invoice_date) AS invoice_receipt_delay_days,
+    DATEDIFF(
+        i.received_date,
+        i.invoice_date
+    ) AS invoice_receipt_delay_days,
 
     CASE
         WHEN i.exception_type_id IS NULL THEN 'Standard Process'
@@ -74,14 +77,20 @@ SELECT
 
     CASE
         WHEN p.actual_payment_date IS NULL THEN 'Open'
-        WHEN p.actual_payment_date < p.scheduled_payment_date THEN 'Paid Early'
-        WHEN p.actual_payment_date = p.scheduled_payment_date THEN 'Paid On Time'
-        WHEN p.actual_payment_date > p.scheduled_payment_date THEN 'Paid Late'
+        WHEN p.actual_payment_date < p.scheduled_payment_date
+            THEN 'Paid Early'
+        WHEN p.actual_payment_date = p.scheduled_payment_date
+            THEN 'Paid On Time'
+        WHEN p.actual_payment_date > p.scheduled_payment_date
+            THEN 'Paid Late'
     END AS payment_timing,
 
     CASE
         WHEN p.actual_payment_date IS NULL THEN NULL
-        ELSE DATEDIFF(p.actual_payment_date, p.scheduled_payment_date)
+        ELSE DATEDIFF(
+            p.actual_payment_date,
+            p.scheduled_payment_date
+        )
     END AS payment_delay_days,
 
     CASE
@@ -89,10 +98,13 @@ SELECT
         ELSE 0
     END AS open_invoice_amount,
 
+    -- COMMENT: PO variance is calculated against the total value
+    -- of all invoices assigned to the same purchase order.
+    -- This avoids comparing one invoice to the complete PO amount.
     CASE
         WHEN po.po_amount IS NULL THEN NULL
-        ELSE i.invoice_amount - po.po_amount
-    END AS invoice_vs_po_difference
+        ELSE pit.total_invoiced_amount_for_po - po.po_amount
+    END AS po_invoice_variance_amount
 
 FROM invoices i
 INNER JOIN vendors v
@@ -101,11 +113,19 @@ INNER JOIN departments d
     ON i.department_id = d.department_id
 LEFT JOIN purchase_orders po
     ON i.po_id = po.po_id
+LEFT JOIN (
+    SELECT
+        po_id,
+        SUM(invoice_amount) AS total_invoiced_amount_for_po
+    FROM invoices
+    WHERE po_id IS NOT NULL
+    GROUP BY po_id
+) pit
+    ON i.po_id = pit.po_id
 LEFT JOIN exception_types et
     ON i.exception_type_id = et.exception_type_id
 LEFT JOIN payments p
     ON i.invoice_id = p.invoice_id;
-
 
 -- ============================================================
 -- 3. Payment performance
@@ -132,14 +152,20 @@ SELECT
 
     CASE
         WHEN p.actual_payment_date IS NULL THEN 'Open'
-        WHEN p.actual_payment_date < p.scheduled_payment_date THEN 'Paid Early'
-        WHEN p.actual_payment_date = p.scheduled_payment_date THEN 'Paid On Time'
-        WHEN p.actual_payment_date > p.scheduled_payment_date THEN 'Paid Late'
+        WHEN p.actual_payment_date < p.scheduled_payment_date
+            THEN 'Paid Early'
+        WHEN p.actual_payment_date = p.scheduled_payment_date
+            THEN 'Paid On Time'
+        WHEN p.actual_payment_date > p.scheduled_payment_date
+            THEN 'Paid Late'
     END AS payment_timing,
 
     CASE
         WHEN p.actual_payment_date IS NULL THEN NULL
-        ELSE DATEDIFF(p.actual_payment_date, p.scheduled_payment_date)
+        ELSE DATEDIFF(
+            p.actual_payment_date,
+            p.scheduled_payment_date
+        )
     END AS payment_delay_days,
 
     CASE
@@ -153,10 +179,9 @@ INNER JOIN vendors v
 LEFT JOIN payments p
     ON i.invoice_id = p.invoice_id;
 
-
 -- ============================================================
 -- 4. Process step durations
--- Calculates time between consecutive process events.
+-- Calculates time between consecutive completed process events.
 -- Uses LAG window function.
 -- ============================================================
 
@@ -167,7 +192,6 @@ SELECT
     process_steps.event_name,
     process_steps.previous_event_timestamp,
     process_steps.event_timestamp,
-
     process_steps.department_id,
     d.department_name,
 
@@ -191,30 +215,32 @@ FROM (
         ie.invoice_id,
         ie.event_name,
         ie.event_timestamp,
+        ie.event_id,
         ie.department_id,
 
         LAG(ie.event_name) OVER (
             PARTITION BY ie.invoice_id
-            ORDER BY ie.event_timestamp
+            ORDER BY ie.event_timestamp, ie.event_id
         ) AS previous_event_name,
 
         LAG(ie.event_timestamp) OVER (
             PARTITION BY ie.invoice_id
-            ORDER BY ie.event_timestamp
+            ORDER BY ie.event_timestamp, ie.event_id
         ) AS previous_event_timestamp
 
     FROM invoice_events ie
-) AS process_steps
 
+    -- COMMENT: Only completed events are used for duration metrics.
+    -- Pending work belongs to open-case monitoring instead.
+    WHERE ie.event_status = 'Completed'
+) AS process_steps
 INNER JOIN departments d
     ON process_steps.department_id = d.department_id
-
 WHERE process_steps.previous_event_timestamp IS NOT NULL;
-
 
 -- ============================================================
 -- 5. Process variants
--- Reconstructs the event path of each invoice.
+-- Reconstructs the observed event path of each invoice.
 -- ============================================================
 
 CREATE VIEW vw_process_variants AS
@@ -229,19 +255,17 @@ SELECT
 
     GROUP_CONCAT(
         ie.event_name
-        ORDER BY ie.event_timestamp
+        ORDER BY ie.event_timestamp, ie.event_id
         SEPARATOR ' > '
     ) AS process_variant
 
 FROM invoices i
 INNER JOIN invoice_events ie
     ON i.invoice_id = ie.invoice_id
-
 GROUP BY
     i.invoice_id,
     i.invoice_number,
     i.exception_type_id;
-
 
 -- ============================================================
 -- 6. Process cycle times
@@ -265,56 +289,74 @@ SELECT
         ELSE 'Exception Process'
     END AS process_type,
 
-    MIN(CASE
-        WHEN ie.event_name = 'Invoice Received'
-        THEN ie.event_timestamp
-    END) AS invoice_received_timestamp,
+    MIN(
+        CASE
+            WHEN ie.event_name = 'Invoice Received'
+                THEN ie.event_timestamp
+        END
+    ) AS invoice_received_timestamp,
 
-    MAX(CASE
-        WHEN ie.event_name = 'Payment Scheduled'
-        THEN ie.event_timestamp
-    END) AS payment_scheduled_timestamp,
+    MAX(
+        CASE
+            WHEN ie.event_name = 'Payment Scheduled'
+                THEN ie.event_timestamp
+        END
+    ) AS payment_scheduled_timestamp,
 
-    MAX(CASE
-        WHEN ie.event_name = 'Paid'
-        THEN ie.event_timestamp
-    END) AS paid_timestamp,
+    MAX(
+        CASE
+            WHEN ie.event_name = 'Paid'
+                THEN ie.event_timestamp
+        END
+    ) AS paid_timestamp,
 
     TIMESTAMPDIFF(
         HOUR,
-        MIN(CASE
-            WHEN ie.event_name = 'Invoice Received'
-            THEN ie.event_timestamp
-        END),
-        MAX(CASE
-            WHEN ie.event_name = 'Payment Scheduled'
-            THEN ie.event_timestamp
-        END)
+        MIN(
+            CASE
+                WHEN ie.event_name = 'Invoice Received'
+                    THEN ie.event_timestamp
+            END
+        ),
+        MAX(
+            CASE
+                WHEN ie.event_name = 'Payment Scheduled'
+                    THEN ie.event_timestamp
+            END
+        )
     ) AS receipt_to_payment_scheduled_hours,
 
     TIMESTAMPDIFF(
         HOUR,
-        MIN(CASE
-            WHEN ie.event_name = 'Invoice Received'
-            THEN ie.event_timestamp
-        END),
-        MAX(CASE
-            WHEN ie.event_name = 'Paid'
-            THEN ie.event_timestamp
-        END)
+        MIN(
+            CASE
+                WHEN ie.event_name = 'Invoice Received'
+                    THEN ie.event_timestamp
+            END
+        ),
+        MAX(
+            CASE
+                WHEN ie.event_name = 'Paid'
+                    THEN ie.event_timestamp
+            END
+        )
     ) AS invoice_to_payment_cycle_hours,
 
     ROUND(
         TIMESTAMPDIFF(
             HOUR,
-            MIN(CASE
-                WHEN ie.event_name = 'Invoice Received'
-                THEN ie.event_timestamp
-            END),
-            MAX(CASE
-                WHEN ie.event_name = 'Paid'
-                THEN ie.event_timestamp
-            END)
+            MIN(
+                CASE
+                    WHEN ie.event_name = 'Invoice Received'
+                        THEN ie.event_timestamp
+                END
+            ),
+            MAX(
+                CASE
+                    WHEN ie.event_name = 'Paid'
+                        THEN ie.event_timestamp
+                END
+            )
         ) / 24,
         2
     ) AS invoice_to_payment_cycle_days
@@ -327,6 +369,9 @@ INNER JOIN departments d
 INNER JOIN invoice_events ie
     ON i.invoice_id = ie.invoice_id
 
+-- COMMENT: Cycle-time KPIs use completed events only.
+WHERE ie.event_status = 'Completed'
+
 GROUP BY
     i.invoice_id,
     i.invoice_number,
@@ -336,7 +381,6 @@ GROUP BY
     d.department_id,
     d.department_name,
     i.exception_type_id;
-
 
 -- ============================================================
 -- 7. Vendor performance
@@ -354,15 +398,26 @@ SELECT
     v.risk_level,
 
     COUNT(DISTINCT i.invoice_id) AS total_invoices,
-    COALESCE(SUM(i.invoice_amount), 0) AS total_invoice_amount,
-    COALESCE(AVG(i.invoice_amount), 0) AS average_invoice_amount,
 
-    COALESCE(SUM(
-        CASE
-            WHEN i.exception_type_id IS NOT NULL THEN 1
-            ELSE 0
-        END
-    ), 0) AS exception_invoice_count,
+    COALESCE(
+        SUM(i.invoice_amount),
+        0
+    ) AS total_invoice_amount,
+
+    COALESCE(
+        AVG(i.invoice_amount),
+        0
+    ) AS average_invoice_amount,
+
+    COALESCE(
+        SUM(
+            CASE
+                WHEN i.exception_type_id IS NOT NULL THEN 1
+                ELSE 0
+            END
+        ),
+        0
+    ) AS exception_invoice_count,
 
     ROUND(
         COALESCE(
@@ -377,35 +432,54 @@ SELECT
         2
     ) AS exception_rate_percent,
 
-    COALESCE(SUM(
-        CASE
-            WHEN p.payment_status = 'Open' THEN 1
-            ELSE 0
-        END
-    ), 0) AS open_payment_count,
+    COALESCE(
+        SUM(
+            CASE
+                WHEN p.payment_status = 'Open' THEN 1
+                ELSE 0
+            END
+        ),
+        0
+    ) AS open_payment_count,
 
-    COALESCE(SUM(
-        CASE
-            WHEN p.payment_status = 'Open' THEN i.invoice_amount
-            ELSE 0
-        END
-    ), 0) AS open_invoice_amount,
+    COALESCE(
+        SUM(
+            CASE
+                WHEN p.payment_status = 'Open' THEN i.invoice_amount
+                ELSE 0
+            END
+        ),
+        0
+    ) AS open_invoice_amount,
 
-    COALESCE(SUM(
-        CASE
-            WHEN p.actual_payment_date > p.scheduled_payment_date THEN 1
-            ELSE 0
-        END
-    ), 0) AS late_payment_count,
+    COALESCE(
+        SUM(
+            CASE
+                WHEN p.actual_payment_date > p.scheduled_payment_date
+                    THEN 1
+                ELSE 0
+            END
+        ),
+        0
+    ) AS late_payment_count,
 
     ROUND(
         COALESCE(
             SUM(
                 CASE
-                    WHEN p.actual_payment_date > p.scheduled_payment_date THEN 1
+                    WHEN p.actual_payment_date > p.scheduled_payment_date
+                        THEN 1
                     ELSE 0
                 END
-            ) / NULLIF(COUNT(p.payment_id), 0) * 100,
+            ) / NULLIF(
+                SUM(
+                    CASE
+                        WHEN p.payment_status = 'Paid' THEN 1
+                        ELSE 0
+                    END
+                ),
+                0
+            ) * 100,
             0
         ),
         2
@@ -437,7 +511,6 @@ GROUP BY
     v.payment_terms_days,
     v.risk_level;
 
-
 -- ============================================================
 -- 8. Open process cases
 -- Shows the latest known process event for unfinished invoices.
@@ -451,6 +524,7 @@ SELECT
     i.invoice_amount,
 
     v.vendor_name,
+
     d.department_name AS invoice_owner_department,
 
     latest_event.event_name AS latest_event_name,
@@ -469,7 +543,6 @@ INNER JOIN vendors v
     ON i.vendor_id = v.vendor_id
 INNER JOIN departments d
     ON i.department_id = d.department_id
-
 INNER JOIN (
     SELECT
         ranked_events.invoice_id,
@@ -482,12 +555,13 @@ INNER JOIN (
             ie.invoice_id,
             ie.event_name,
             ie.event_timestamp,
+            ie.event_id,
             ie.event_status,
             ie.department_id,
 
             ROW_NUMBER() OVER (
                 PARTITION BY ie.invoice_id
-                ORDER BY ie.event_timestamp DESC
+                ORDER BY ie.event_timestamp DESC, ie.event_id DESC
             ) AS latest_event_rank
 
         FROM invoice_events ie
@@ -495,8 +569,6 @@ INNER JOIN (
     WHERE ranked_events.latest_event_rank = 1
 ) AS latest_event
     ON i.invoice_id = latest_event.invoice_id
-
 INNER JOIN departments event_department
     ON latest_event.department_id = event_department.department_id
-
 WHERE latest_event.event_name <> 'Paid';
