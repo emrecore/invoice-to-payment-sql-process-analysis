@@ -90,16 +90,6 @@ invoice-to-payment-sql-process-analysis/
 │   ├── data_model.md
 │   ├── kpi_definitions.md
 │   └── insights_summary.md
-│
-├── outputs/
-│   ├── invoice_overview.csv
-│   ├── payment_performance.csv
-│   ├── process_bottlenecks.csv
-│   ├── vendor_performance.csv
-│   └── executive_summary.csv
-│
-└── diagrams/
-    └── erd.png
 ```
 
 ## Business Value
