@@ -2,13 +2,12 @@
 -- Project: Invoice-to-Payment Process Analysis with SQL
 -- File: 08_final_business_insights.sql
 -- Purpose: Final business-focused insights for management.
---          Uses reusable analytical views created in
---          07_create_views.sql.
+-- Uses reusable analytical views created in
+-- 07_create_views.sql.
 -- SQL Dialect: MySQL
 -- ============================================================
 
 USE invoice_to_payment_analysis;
-
 
 -- ============================================================
 -- 1. Executive KPI overview
@@ -18,8 +17,16 @@ USE invoice_to_payment_analysis;
 
 SELECT
     COUNT(*) AS total_invoices,
-    ROUND(SUM(invoice_amount), 2) AS total_invoice_amount,
-    ROUND(AVG(invoice_amount), 2) AS average_invoice_amount,
+
+    ROUND(
+        SUM(invoice_amount),
+        2
+    ) AS total_invoice_amount,
+
+    ROUND(
+        AVG(invoice_amount),
+        2
+    ) AS average_invoice_amount,
 
     SUM(
         CASE
@@ -45,7 +52,10 @@ SELECT
         END
     ) AS open_invoice_count,
 
-    ROUND(SUM(open_invoice_amount), 2) AS open_invoice_amount,
+    ROUND(
+        SUM(open_invoice_amount),
+        2
+    ) AS open_invoice_amount,
 
     SUM(
         CASE
@@ -54,18 +64,28 @@ SELECT
         END
     ) AS late_payment_count,
 
+    -- COMMENT: The late payment rate is based only on paid invoices.
+    -- Open invoices are excluded because their final payment timing
+    -- is not yet known.
     ROUND(
         SUM(
             CASE
                 WHEN payment_timing = 'Paid Late' THEN 1
                 ELSE 0
             END
-        ) / COUNT(*) * 100,
+        ) / NULLIF(
+            SUM(
+                CASE
+                    WHEN payment_status = 'Paid' THEN 1
+                    ELSE 0
+                END
+            ),
+            0
+        ) * 100,
         2
     ) AS late_payment_rate_percent
 
 FROM vw_invoice_overview;
-
 
 -- ============================================================
 -- 2. Process cycle time overview
@@ -96,7 +116,6 @@ SELECT
     ) AS avg_invoice_to_payment_cycle_days
 
 FROM vw_process_cycle_times;
-
 
 -- ============================================================
 -- 3. Top process bottlenecks
@@ -129,7 +148,6 @@ GROUP BY
 ORDER BY
     avg_step_duration_hours DESC;
 
-
 -- ============================================================
 -- 4. Bottleneck ranking
 -- Ranks process transitions by average duration.
@@ -140,8 +158,14 @@ WITH bottlenecks AS (
         previous_event_name,
         event_name,
         COUNT(*) AS number_of_cases,
-        ROUND(AVG(step_duration_hours), 2) AS avg_step_duration_hours
+
+        ROUND(
+            AVG(step_duration_hours),
+            2
+        ) AS avg_step_duration_hours
+
     FROM vw_process_step_durations
+
     GROUP BY
         previous_event_name,
         event_name
@@ -162,7 +186,6 @@ FROM bottlenecks
 ORDER BY
     bottleneck_rank;
 
-
 -- ============================================================
 -- 5. Vendor performance ranking
 -- Combines invoice volume, exceptions, open amounts,
@@ -174,31 +197,26 @@ SELECT
     vendor_name,
     vendor_category,
     risk_level,
-
     total_invoices,
     total_invoice_amount,
-
     exception_invoice_count,
     exception_rate_percent,
-
     open_payment_count,
     open_invoice_amount,
-
     late_payment_count,
     late_payment_rate_percent,
-
     avg_invoice_to_payment_cycle_days,
 
     CASE
         WHEN exception_rate_percent >= 50
             OR open_invoice_amount >= 10000
             OR avg_invoice_to_payment_cycle_days >= 25
-        THEN 'Critical'
+            THEN 'Critical'
 
         WHEN exception_rate_percent >= 25
             OR open_invoice_amount > 0
             OR avg_invoice_to_payment_cycle_days >= 15
-        THEN 'Needs Monitoring'
+            THEN 'Needs Monitoring'
 
         ELSE 'Reliable'
     END AS vendor_performance_category
@@ -209,7 +227,6 @@ ORDER BY
     vendor_performance_category DESC,
     open_invoice_amount DESC,
     exception_rate_percent DESC;
-
 
 -- ============================================================
 -- 6. Most critical vendors
@@ -238,7 +255,6 @@ ORDER BY
     exception_rate_percent DESC,
     late_payment_rate_percent DESC;
 
-
 -- ============================================================
 -- 7. Exception type impact analysis
 -- Identifies which exception types affect the most invoices
@@ -250,9 +266,15 @@ SELECT
     exception_category,
     COUNT(*) AS affected_invoice_count,
 
-    ROUND(SUM(invoice_amount), 2) AS affected_invoice_amount,
+    ROUND(
+        SUM(invoice_amount),
+        2
+    ) AS affected_invoice_amount,
 
-    ROUND(AVG(invoice_amount), 2) AS avg_affected_invoice_amount,
+    ROUND(
+        AVG(invoice_amount),
+        2
+    ) AS avg_affected_invoice_amount,
 
     ROUND(
         COUNT(*) / (
@@ -273,7 +295,6 @@ GROUP BY
 ORDER BY
     affected_invoice_amount DESC,
     affected_invoice_count DESC;
-
 
 -- ============================================================
 -- 8. Exception process versus standard process
@@ -307,7 +328,6 @@ GROUP BY
 ORDER BY
     avg_internal_processing_hours DESC;
 
-
 -- ============================================================
 -- 9. Department workload and bottleneck analysis
 -- Uses the responsible department of each process event.
@@ -336,7 +356,6 @@ GROUP BY
 
 ORDER BY
     avg_step_duration_hours DESC;
-
 
 -- ============================================================
 -- 10. Approval bottleneck analysis
@@ -369,7 +388,6 @@ GROUP BY
 ORDER BY
     avg_approval_waiting_hours DESC;
 
-
 -- ============================================================
 -- 11. Open invoice exposure
 -- Shows unpaid financial exposure by vendor and department.
@@ -379,7 +397,11 @@ SELECT
     vendor_name,
     department_name,
     COUNT(*) AS open_invoice_count,
-    ROUND(SUM(invoice_amount), 2) AS open_invoice_amount
+
+    ROUND(
+        SUM(invoice_amount),
+        2
+    ) AS open_invoice_amount
 
 FROM vw_invoice_overview
 
@@ -391,7 +413,6 @@ GROUP BY
 
 ORDER BY
     open_invoice_amount DESC;
-
 
 -- ============================================================
 -- 12. Late payment analysis
@@ -415,7 +436,6 @@ ORDER BY
     payment_delay_days DESC,
     invoice_amount DESC;
 
-
 -- ============================================================
 -- 13. Payment performance by vendor
 -- Summarizes payment punctuality by vendor.
@@ -423,7 +443,6 @@ ORDER BY
 
 SELECT
     vendor_name,
-
     COUNT(*) AS total_invoices,
 
     SUM(
@@ -458,7 +477,7 @@ SELECT
         AVG(
             CASE
                 WHEN payment_timing = 'Paid Late'
-                THEN payment_delay_days
+                    THEN payment_delay_days
                 ELSE NULL
             END
         ),
@@ -473,7 +492,6 @@ GROUP BY
 ORDER BY
     paid_late_count DESC,
     open_payment_count DESC;
-
 
 -- ============================================================
 -- 14. Longest invoice processing cases
@@ -495,8 +513,8 @@ WHERE invoice_to_payment_cycle_days IS NOT NULL
 
 ORDER BY
     invoice_to_payment_cycle_days DESC
-LIMIT 10;
 
+LIMIT 10;
 
 -- ============================================================
 -- 15. Open process cases
@@ -521,7 +539,6 @@ FROM vw_open_process_cases
 ORDER BY
     latest_event_timestamp;
 
-
 -- ============================================================
 -- 16. Process variant ranking
 -- Shows which event paths are most common.
@@ -542,7 +559,6 @@ ORDER BY
     invoice_count DESC,
     process_type;
 
-
 -- ============================================================
 -- 17. Process variant efficiency analysis
 -- Compares paths by average cycle time.
@@ -551,7 +567,6 @@ ORDER BY
 SELECT
     pv.process_variant,
     pv.process_type,
-
     COUNT(*) AS invoice_count,
 
     ROUND(
@@ -574,7 +589,6 @@ GROUP BY
 
 ORDER BY
     avg_invoice_to_payment_cycle_days DESC;
-
 
 -- ============================================================
 -- 18. Process SLA overview
@@ -611,7 +625,6 @@ GROUP BY
 ORDER BY
     invoice_count DESC;
 
-
 -- ============================================================
 -- 19. SLA breaches by vendor
 -- Identifies vendors linked to slow internal processing.
@@ -619,7 +632,6 @@ ORDER BY
 
 SELECT
     vendor_name,
-
     COUNT(*) AS invoice_count,
 
     SUM(
@@ -655,7 +667,6 @@ ORDER BY
     sla_breach_rate_percent DESC,
     not_scheduled_count DESC;
 
-
 -- ============================================================
 -- 20. Final optimization opportunity summary
 -- Combines operational risks into a prioritization table.
@@ -672,13 +683,13 @@ SELECT
 
     CASE
         WHEN open_invoice_amount >= 10000
-             AND exception_rate_percent >= 50
-        THEN 'High Priority'
+            AND exception_rate_percent >= 50
+            THEN 'High Priority'
 
         WHEN open_invoice_amount > 0
-             OR exception_rate_percent >= 50
-             OR avg_invoice_to_payment_cycle_days >= 25
-        THEN 'Medium Priority'
+            OR exception_rate_percent >= 50
+            OR avg_invoice_to_payment_cycle_days >= 25
+            THEN 'Medium Priority'
 
         ELSE 'Low Priority'
     END AS optimization_priority,
