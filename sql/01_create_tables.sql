@@ -2,10 +2,9 @@
 -- Project: Invoice-to-Payment Process Analysis with SQL
 -- File: 01_create_tables.sql
 -- Purpose: Create all database tables, primary keys,
---          foreign keys, constraints, and indexes.
+-- foreign keys, constraints, and indexes.
 -- SQL Dialect: MySQL
 -- ============================================================
-
 
 -- ============================================================
 -- 1. Create and select database
@@ -14,7 +13,6 @@
 CREATE DATABASE IF NOT EXISTS invoice_to_payment_analysis;
 
 USE invoice_to_payment_analysis;
-
 
 -- ============================================================
 -- 2. Drop existing tables
@@ -28,7 +26,6 @@ DROP TABLE IF EXISTS purchase_orders;
 DROP TABLE IF EXISTS exception_types;
 DROP TABLE IF EXISTS departments;
 DROP TABLE IF EXISTS vendors;
-
 
 -- ============================================================
 -- 3. Create table: vendors
@@ -50,7 +47,6 @@ CREATE TABLE vendors (
         CHECK (risk_level IN ('Low', 'Medium', 'High'))
 );
 
-
 -- ============================================================
 -- 4. Create table: departments
 -- Stores internal departments and cost centers.
@@ -62,7 +58,6 @@ CREATE TABLE departments (
     cost_center VARCHAR(20) NOT NULL UNIQUE,
     department_type VARCHAR(50) NOT NULL
 );
-
 
 -- ============================================================
 -- 5. Create table: exception_types
@@ -78,7 +73,6 @@ CREATE TABLE exception_types (
     CONSTRAINT chk_exception_resolution_days
         CHECK (standard_resolution_days >= 0)
 );
-
 
 -- ============================================================
 -- 6. Create table: purchase_orders
@@ -107,7 +101,6 @@ CREATE TABLE purchase_orders (
     CONSTRAINT chk_purchase_orders_status
         CHECK (po_status IN ('Open', 'Closed', 'Cancelled'))
 );
-
 
 -- ============================================================
 -- 7. Create table: invoices
@@ -149,9 +142,16 @@ CREATE TABLE invoices (
         CHECK (received_date >= invoice_date),
 
     CONSTRAINT chk_invoices_status
-        CHECK (invoice_status IN ('Received', 'In Review', 'Approved', 'Paid', 'Rejected'))
+        CHECK (
+            invoice_status IN (
+                'Received',
+                'In Review',
+                'Approved',
+                'Paid',
+                'Rejected'
+            )
+        )
 );
-
 
 -- ============================================================
 -- 8. Create table: payments
@@ -170,6 +170,12 @@ CREATE TABLE payments (
         FOREIGN KEY (invoice_id)
         REFERENCES invoices (invoice_id),
 
+    -- COMMENT: This project models one full payment per invoice.
+    -- A unique constraint prevents duplicate payment records
+    -- from inflating invoice and KPI calculations.
+    CONSTRAINT uq_payments_invoice
+        UNIQUE (invoice_id),
+
     CONSTRAINT chk_payments_amount
         CHECK (payment_amount >= 0),
 
@@ -179,10 +185,35 @@ CREATE TABLE payments (
     CONSTRAINT chk_payments_actual_date
         CHECK (
             actual_payment_date IS NULL
-            OR actual_payment_date >= DATE_SUB(scheduled_payment_date, INTERVAL 90 DAY)
+            OR actual_payment_date >= DATE_SUB(
+                scheduled_payment_date,
+                INTERVAL 90 DAY
+            )
+        ),
+
+    -- COMMENT: Payment status, payment date, and payment amount
+    -- must follow one consistent business rule in this simplified model.
+    CONSTRAINT chk_payments_status_consistency
+        CHECK (
+            (
+                payment_status = 'Paid'
+                AND actual_payment_date IS NOT NULL
+                AND payment_amount > 0
+            )
+            OR
+            (
+                payment_status = 'Open'
+                AND actual_payment_date IS NULL
+                AND payment_amount = 0
+            )
+            OR
+            (
+                payment_status = 'Cancelled'
+                AND actual_payment_date IS NULL
+                AND payment_amount = 0
+            )
         )
 );
-
 
 -- ============================================================
 -- 9. Create table: invoice_events
@@ -227,7 +258,6 @@ CREATE TABLE invoice_events (
         CHECK (event_status IN ('Completed', 'Pending', 'Rejected'))
 );
 
-
 -- ============================================================
 -- 10. Create indexes
 -- These indexes support common joins and analysis queries.
@@ -251,8 +281,8 @@ CREATE INDEX idx_invoices_department_id
 CREATE INDEX idx_invoices_exception_type_id
     ON invoices (exception_type_id);
 
-CREATE INDEX idx_payments_invoice_id
-    ON payments (invoice_id);
+-- The unique constraint on invoice_id already creates an index.
+-- No separate idx_payments_invoice_id index is needed.
 
 CREATE INDEX idx_invoice_events_invoice_id
     ON invoice_events (invoice_id);
