@@ -1,0 +1,219 @@
+# Data Model
+
+## Overview
+
+The database models a simplified Invoice-to-Payment process within an Accounts Payable environment.
+
+It combines vendor master data, internal departments, purchase orders, invoices, payments, exception classifications, and timestamped process events. The structure supports SQL-based analysis of process performance, payment behavior, exception handling, bottlenecks, and data quality.
+
+## Core Entities
+
+The model consists of seven main tables:
+
+* `vendors`
+* `departments`
+* `exception_types`
+* `purchase_orders`
+* `invoices`
+* `payments`
+* `invoice_events`
+
+## Vendors
+
+The `vendors` table stores supplier master data.
+
+It includes:
+
+* `vendor_id` as the primary key
+* Vendor name
+* Country
+* Vendor category
+* Payment terms in days
+* Risk level
+
+This table supports vendor performance analysis, exception analysis, payment exposure analysis, and vendor risk classification.
+
+## Departments
+
+The `departments` table stores internal departments involved in the Invoice-to-Payment process.
+
+It includes:
+
+* `department_id` as the primary key
+* Department name
+* Cost center
+* Department type
+
+Departments can own invoices, purchase orders, and process events. This allows the project to analyze workload, approval delays, and bottlenecks by department.
+
+## Exception Types
+
+The `exception_types` table defines possible invoice processing issues.
+
+It includes:
+
+* `exception_type_id` as the primary key
+* Exception name
+* Exception category
+* Standard resolution time in days
+
+Examples include:
+
+* Missing Purchase Order
+* Price Mismatch
+* Quantity Mismatch
+* Missing Approval
+* Duplicate Invoice Suspected
+* Incorrect Vendor Data
+
+This table supports the analysis of exception frequency, resolution time, and operational impact.
+
+## Purchase Orders
+
+The `purchase_orders` table stores purchase order information.
+
+It includes:
+
+* `po_id` as the primary key
+* `vendor_id` as a foreign key
+* `department_id` as a foreign key
+* Purchase order date
+* Purchase order amount
+* Purchase order status
+
+Purchase orders are used to support PO matching and invoice-to-PO variance analysis.
+
+## Invoices
+
+The `invoices` table is the central transaction table.
+
+It includes:
+
+* `invoice_id` as the primary key
+* `vendor_id` as a foreign key
+* Optional `po_id` as a foreign key
+* `department_id` as a foreign key
+* Unique invoice number
+* Invoice date
+* Received date
+* Invoice amount
+* Invoice status
+* Optional `exception_type_id` as a foreign key
+
+An invoice may not have a purchase order reference. This represents a realistic exception case where an invoice cannot be matched to a valid purchase order.
+
+## Payments
+
+The `payments` table stores payment scheduling and payment execution data.
+
+It includes:
+
+* `payment_id` as the primary key
+* `invoice_id` as a foreign key
+* Scheduled payment date
+* Actual payment date
+* Payment amount
+* Payment status
+
+The project uses one payment record per invoice. This makes it possible to evaluate open invoices, payment timing, and payment delays.
+
+## Invoice Events
+
+The `invoice_events` table stores the event log used for process analysis.
+
+It includes:
+
+* `event_id` as the primary key
+* `invoice_id` as a foreign key
+* Event name
+* Event timestamp
+* `department_id` as a foreign key
+* Event status
+
+Typical process events include:
+
+```text
+Invoice Received
+Data Validation
+PO Matching
+Exception Raised
+Correction Requested
+Correction Received
+Approval
+Approval Rejected
+Rework
+Payment Scheduled
+Paid
+```
+
+The event log enables the calculation of:
+
+* Process step durations
+* Invoice cycle times
+* Bottlenecks
+* Process variants
+* Exception resolution times
+* Open case age
+
+## Relationships
+
+The main relationships in the database are:
+
+```text
+vendors
+  ├──< purchase_orders
+  └──< invoices
+
+departments
+  ├──< purchase_orders
+  ├──< invoices
+  └──< invoice_events
+
+exception_types
+  └──< invoices
+
+purchase_orders
+  └──< invoices
+
+invoices
+  ├──< payments
+  └──< invoice_events
+```
+
+The relationship logic is:
+
+* One vendor can have many purchase orders.
+* One vendor can issue many invoices.
+* One department can own many purchase orders and invoices.
+* One department can process many invoice events.
+* One exception type can be assigned to many invoices.
+* One purchase order can be linked to multiple invoices.
+* One invoice has one payment record in the current model.
+* One invoice can contain multiple process events.
+
+## Data Integrity
+
+The schema uses several controls to maintain data quality:
+
+* Primary keys uniquely identify records.
+* Foreign keys enforce valid relationships between tables.
+* `NOT NULL` constraints protect mandatory fields.
+* `UNIQUE` constraints are used for invoice numbers and cost centers.
+* `CHECK` constraints validate status values, risk levels, amounts, and date logic.
+* Indexes support efficient joins and repeated analytical queries.
+
+## Analytical Design
+
+The data model supports the following analyses:
+
+* Vendor performance
+* Invoice volume and financial exposure
+* Payment timing and payment delay
+* Open invoice analysis
+* PO matching and invoice variance analysis
+* Exception frequency and impact
+* Exception resolution time
+* Department workload and approval delays
+* Process duration and bottleneck analysis
+* Process variant analysis
+* Data quality checks
