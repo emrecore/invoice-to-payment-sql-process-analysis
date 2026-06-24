@@ -95,3 +95,8 @@ invoice-to-payment-sql-process-analysis/
 ## Business Value
 
 This project demonstrates how SQL can be used to transform operational finance data into actionable process insights. The analysis supports better visibility into invoice handling, vendor-related exceptions, payment delays, and improvement opportunities within Accounts Payable operations.
+
+## AI Usage
+
+AI was used as a review and improvement tool during development.
+The SQL queries, data model, KPI logic, and project structure were created primarily by me. AI was used to review code, identify potential issues, improve clarity, and suggest refinements. All suggestions were evaluated, adapted, and validated by me before being included.
