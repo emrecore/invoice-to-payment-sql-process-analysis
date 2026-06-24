@@ -2,12 +2,11 @@
 -- Project: Invoice-to-Payment Process Analysis with SQL
 -- File: 03_basic_queries.sql
 -- Purpose: Basic SQL queries using SELECT, WHERE, ORDER BY,
---          DISTINCT, LIMIT, and simple calculated columns.
+-- DISTINCT, LIMIT, and simple calculated columns.
 -- SQL Dialect: MySQL
 -- ============================================================
 
 USE invoice_to_payment_analysis;
-
 
 -- ============================================================
 -- 1. View all vendors
@@ -23,7 +22,6 @@ SELECT
     risk_level
 FROM vendors;
 
-
 -- ============================================================
 -- 2. View all departments
 -- Basic SELECT query.
@@ -35,7 +33,6 @@ SELECT
     cost_center,
     department_type
 FROM departments;
-
 
 -- ============================================================
 -- 3. View all invoices
@@ -55,10 +52,11 @@ SELECT
     exception_type_id
 FROM invoices;
 
-
 -- ============================================================
--- 4. Find all open or in-review invoices
+-- 4. Find invoices awaiting payment approval or still under review
 -- Demonstrates WHERE with OR.
+-- COMMENT: "Approved" invoices are included because they may still
+-- await payment, while "In Review" invoices are still being processed.
 -- ============================================================
 
 SELECT
@@ -73,7 +71,6 @@ FROM invoices
 WHERE invoice_status = 'Approved'
    OR invoice_status = 'In Review'
 ORDER BY received_date;
-
 
 -- ============================================================
 -- 5. Find all paid invoices
@@ -91,7 +88,6 @@ FROM invoices
 WHERE invoice_status = 'Paid'
 ORDER BY invoice_date;
 
-
 -- ============================================================
 -- 6. Find invoices above 5,000 EUR
 -- Demonstrates numeric filtering.
@@ -105,7 +101,6 @@ SELECT
 FROM invoices
 WHERE invoice_amount > 5000
 ORDER BY invoice_amount DESC;
-
 
 -- ============================================================
 -- 7. Find high-value invoices above 10,000 EUR
@@ -123,7 +118,6 @@ FROM invoices
 WHERE invoice_amount > 10000
 ORDER BY invoice_amount DESC;
 
-
 -- ============================================================
 -- 8. Find invoices between 2,500 and 7,500 EUR
 -- Demonstrates BETWEEN.
@@ -137,7 +131,6 @@ SELECT
 FROM invoices
 WHERE invoice_amount BETWEEN 2500 AND 7500
 ORDER BY invoice_amount;
-
 
 -- ============================================================
 -- 9. Find invoices received in January 2025
@@ -155,7 +148,6 @@ FROM invoices
 WHERE received_date BETWEEN '2025-01-01' AND '2025-01-31'
 ORDER BY received_date;
 
-
 -- ============================================================
 -- 10. Find invoices received after February 1, 2025
 -- Demonstrates date comparison.
@@ -170,7 +162,6 @@ SELECT
 FROM invoices
 WHERE received_date >= '2025-02-01'
 ORDER BY received_date;
-
 
 -- ============================================================
 -- 11. Find invoices with an exception
@@ -187,7 +178,6 @@ FROM invoices
 WHERE exception_type_id IS NOT NULL
 ORDER BY invoice_id;
 
-
 -- ============================================================
 -- 12. Find invoices without an exception
 -- Demonstrates IS NULL.
@@ -202,7 +192,6 @@ SELECT
 FROM invoices
 WHERE exception_type_id IS NULL
 ORDER BY invoice_id;
-
 
 -- ============================================================
 -- 13. Find invoices without a purchase order
@@ -219,7 +208,6 @@ SELECT
 FROM invoices
 WHERE po_id IS NULL;
 
-
 -- ============================================================
 -- 14. Find vendors with medium or high risk
 -- Demonstrates IN.
@@ -234,7 +222,6 @@ SELECT
 FROM vendors
 WHERE risk_level IN ('Medium', 'High')
 ORDER BY risk_level, vendor_name;
-
 
 -- ============================================================
 -- 15. Find vendors from Germany
@@ -251,7 +238,6 @@ FROM vendors
 WHERE country = 'Germany'
 ORDER BY vendor_name;
 
-
 -- ============================================================
 -- 16. Find vendors whose name contains GmbH
 -- Demonstrates LIKE.
@@ -266,7 +252,6 @@ FROM vendors
 WHERE vendor_name LIKE '%GmbH%'
 ORDER BY vendor_name;
 
-
 -- ============================================================
 -- 17. Show distinct vendor categories
 -- Demonstrates DISTINCT.
@@ -277,7 +262,6 @@ SELECT DISTINCT
 FROM vendors
 ORDER BY vendor_category;
 
-
 -- ============================================================
 -- 18. Show distinct invoice statuses
 -- Demonstrates DISTINCT.
@@ -287,7 +271,6 @@ SELECT DISTINCT
     invoice_status
 FROM invoices
 ORDER BY invoice_status;
-
 
 -- ============================================================
 -- 19. Show the five largest invoices
@@ -302,7 +285,6 @@ SELECT
 FROM invoices
 ORDER BY invoice_amount DESC
 LIMIT 5;
-
 
 -- ============================================================
 -- 20. Show the five earliest received invoices
@@ -319,7 +301,6 @@ FROM invoices
 ORDER BY received_date ASC
 LIMIT 5;
 
-
 -- ============================================================
 -- 21. Calculate days between invoice date and received date
 -- Demonstrates DATEDIFF.
@@ -333,7 +314,6 @@ SELECT
     DATEDIFF(received_date, invoice_date) AS days_until_received
 FROM invoices
 ORDER BY days_until_received DESC;
-
 
 -- ============================================================
 -- 22. Classify invoices by amount
@@ -352,7 +332,6 @@ SELECT
 FROM invoices
 ORDER BY invoice_amount DESC;
 
-
 -- ============================================================
 -- 23. Classify invoices by process type
 -- Demonstrates CASE WHEN with NULL logic.
@@ -369,7 +348,6 @@ SELECT
     END AS process_type
 FROM invoices
 ORDER BY invoice_id;
-
 
 -- ============================================================
 -- 24. Classify payments by payment timing
@@ -392,7 +370,6 @@ SELECT
 FROM payments
 ORDER BY scheduled_payment_date;
 
-
 -- ============================================================
 -- 25. Calculate payment delay in days
 -- Open payments return NULL as delay here.
@@ -406,7 +383,6 @@ SELECT
     DATEDIFF(actual_payment_date, scheduled_payment_date) AS payment_delay_days
 FROM payments
 ORDER BY payment_delay_days DESC;
-
 
 -- ============================================================
 -- 26. Show only late payments
@@ -422,7 +398,6 @@ SELECT
 FROM payments
 WHERE actual_payment_date > scheduled_payment_date
 ORDER BY payment_delay_days DESC;
-
 
 -- ============================================================
 -- 27. Show open payments
@@ -440,7 +415,6 @@ FROM payments
 WHERE actual_payment_date IS NULL
 ORDER BY scheduled_payment_date;
 
-
 -- ============================================================
 -- 28. Show completed process events
 -- Basic filtering on event log.
@@ -456,7 +430,6 @@ SELECT
 FROM invoice_events
 WHERE event_status = 'Completed'
 ORDER BY invoice_id, event_timestamp;
-
 
 -- ============================================================
 -- 29. Show pending process events
@@ -474,7 +447,6 @@ FROM invoice_events
 WHERE event_status = 'Pending'
 ORDER BY event_timestamp;
 
-
 -- ============================================================
 -- 30. Show events related to exceptions
 -- Demonstrates IN with event names.
@@ -488,9 +460,12 @@ SELECT
     department_id,
     event_status
 FROM invoice_events
-WHERE event_name IN ('Exception Raised', 'Correction Requested', 'Correction Received')
+WHERE event_name IN (
+    'Exception Raised',
+    'Correction Requested',
+    'Correction Received'
+)
 ORDER BY invoice_id, event_timestamp;
-
 
 -- ============================================================
 -- 31. Find events after February 1, 2025
@@ -506,7 +481,6 @@ SELECT
 FROM invoice_events
 WHERE event_timestamp >= '2025-02-01 00:00:00'
 ORDER BY event_timestamp;
-
 
 -- ============================================================
 -- 32. Show purchase orders above 10,000 EUR
@@ -524,7 +498,6 @@ FROM purchase_orders
 WHERE po_amount > 10000
 ORDER BY po_amount DESC;
 
-
 -- ============================================================
 -- 33. Show open purchase orders
 -- Business case: open purchasing commitments.
@@ -540,7 +513,6 @@ SELECT
 FROM purchase_orders
 WHERE po_status = 'Open'
 ORDER BY po_date;
-
 
 -- ============================================================
 -- 34. Calculate simple invoice amount category and status together
@@ -565,7 +537,6 @@ SELECT
     END AS process_status_category
 FROM invoices
 ORDER BY invoice_amount DESC;
-
 
 -- ============================================================
 -- 35. Show invoices that are both high value and not paid
