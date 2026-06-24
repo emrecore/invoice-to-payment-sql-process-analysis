@@ -86,10 +86,10 @@ invoice-to-payment-sql-process-analysis/
 │   └── 08_final_business_insights.sql
 │
 ├── docs/
-│   ├── business_case.md
-│   ├── data_model.md
-│   ├── kpi_definitions.md
-│   └── insights_summary.md
+    ├── business_case.md
+    ├── data_model.md
+    ├── kpi_definitions.md
+    └── insights_summary.md
 ```
 
 ## Business Value
